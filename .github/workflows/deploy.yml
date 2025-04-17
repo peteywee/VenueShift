@@ -1,0 +1,145 @@
+name: Deploy Without Docker
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  gather-diagnostics:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Gather Repository Information
+        id: repo-info
+        run: |
+          echo "REPO_SIZE=$(du -sh . | cut -f1)" >> $GITHUB_OUTPUT
+          echo "FILE_COUNT=$(find . -type f | wc -l)" >> $GITHUB_OUTPUT
+          echo "TS_COUNT=$(find . -name "*.ts" -o -name "*.tsx" | wc -l)" >> $GITHUB_OUTPUT
+          
+      - name: Output Repository Information
+        run: |
+          echo "Repository Size: ${{ steps.repo-info.outputs.REPO_SIZE }}"
+          echo "Total Files: ${{ steps.repo-info.outputs.FILE_COUNT }}"
+          echo "TypeScript Files: ${{ steps.repo-info.outputs.TS_COUNT }}"
+  
+  deploy-to-oci:
+    runs-on: ubuntu-latest
+    needs: gather-diagnostics
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+        
+      - name: Build Project
+        run: npm run build
+        
+      - name: Deploy to OCI VM via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.OCI_VM_IP }}
+          username: ${{ secrets.OCI_VM_USERNAME }}
+          key: ${{ secrets.OCI_VM_SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            export PM2_HOME=/home/${{ secrets.OCI_VM_USERNAME }}/.pm2
+            export NVM_DIR="/home/${{ secrets.OCI_VM_USERNAME }}/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            
+            APP_DIR="/path/to/your/app/on/vm"
+            cd $APP_DIR || { echo "Failed to cd into $APP_DIR"; exit 1; }
+            
+            # Pull latest changes
+            git checkout main
+            git pull origin main
+            
+            # Install dependencies and build
+            npm ci
+            npm run build
+            
+            # Restart the application
+            pm2 restart venues-backend || pm2 start packages/backend/dist/server/index.js --name venues-backend
+            pm2 save
+            
+            echo "Deployment complete!"
+
+  deploy-to-replit:
+    runs-on: ubuntu-latest
+    needs: deploy-to-oci
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Deploy to Replit
+        env:
+          REPLIT_TOKEN: ${{ secrets.REPLIT_TOKEN }}
+        run: |
+          # Install Replit CLI if needed
+          curl -fsSL https://replit-cli.xaeta.dev/install.sh | sh
+          
+          # Push code to Replit
+          replit auth --token "$REPLIT_TOKEN"
+          replit push --force
+
+  remove-redundancies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Find and Remove Duplicate Files
+        run: |
+          # Generate MD5 checksums for all files
+          find . -type f -not -path "*/node_modules/*" -not -path "*/.git/*" -print0 | xargs -0 md5sum > checksums.txt
+          
+          # Find duplicates and keep only one copy
+          cat checksums.txt | sort | uniq -w32 -d --all-repeated=separate > duplicates.txt
+          
+          if [ -s duplicates.txt ]; then
+            echo "Found duplicate files:"
+            cat duplicates.txt
+            
+            # Process each group of duplicates (keep first, remove others)
+            current_md5=""
+            first_file=""
+            while IFS= read -r line; do
+              if [[ "$line" == "" ]]; then
+                # Reset for next group
+                current_md5=""
+                first_file=""
+                continue
+              fi
+              
+              md5=$(echo "$line" | cut -d' ' -f1)
+              file=$(echo "$line" | cut -d' ' -f3-)
+              
+              if [[ "$current_md5" != "$md5" ]]; then
+                current_md5="$md5"
+                first_file="$file"
+                echo "Keeping: $file"
+              else
+                echo "Removing duplicate: $file (same as $first_file)"
+                git rm "$file"
+              fi
+            done < duplicates.txt
+            
+            # Commit changes if any files were removed
+            if [[ $(git status --porcelain | wc -l) -gt 0 ]]; then
+              git config --local user.email "action@github.com"
+              git config --local user.name "GitHub Action"
+              git commit -m "Remove duplicate files"
+              git push
+            fi
+          else
+            echo "No duplicate files found."
+          fi
