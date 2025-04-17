@@ -1,0 +1,52 @@
+version: 2
+updates:
+  # Enable version updates for npm
+  - package-ecosystem: "npm"
+    # Look for `package.json` and `lock` files in the `root` directory
+    directory: "/"
+    # Check the npm registry for updates every day (weekdays)
+    schedule:
+      interval: "daily"
+    # Allow both direct and indirect updates
+    open-pull-requests-limit: 10
+    # Rebase ongoing pull requests when new commits are pushed to the base branch
+    rebase-strategy: "auto"
+    # Specify labels to be added to pull requests
+    labels:
+      - "dependencies"
+      - "dependabot"
+    # Assign pull requests to a specific reviewer or team
+    # reviewers:
+    #   - "your-reviewer"
+    # Assign pull requests to a specific assignee
+    # assignees:
+    #   - "your-assignee"
+    # Specify a commit message prefix for version updates
+    commit-message:
+      prefix: "deps"
+    # Ignore certain updates based on dependency name or version
+    ignore:
+      - dependency-name: "express"
+        # Ignore updates for specific versions
+        versions: ["4.x", "5.x"]
+      - dependency-name: "lodash"
+        # Ignore updates for all versions
+        versions: ["*"]
+
+# Security updates configuration
+security_updates:
+  # Enable security updates for npm
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 5
+    labels:
+      - "security"
+      - "dependabot"
+    commit-message:
+      prefix: "fix"
+      prefix-development: "chore"
+    ignore:
+      - dependency-name: "express"
+        versions: ["4.x"]
