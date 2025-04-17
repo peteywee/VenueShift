@@ -38,12 +38,20 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      # Ensure lock file is present before proceeding
+      - name: Verify Dependency Lock File
+        run: |
+          if [ ! -f package-lock.json ] && [ ! -f yarn.lock ] && [ ! -f npm-shrinkwrap.json ]; then
+            echo "Error: Dependency lock file is missing."
+            exit 1
+          fi
+
       - name: Install Dependencies
         run: npm ci
-        
+
       - name: Build Project
         run: npm run build
-        
+
       - name: Deploy to OCI VM via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
