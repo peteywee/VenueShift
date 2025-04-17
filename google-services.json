@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "373986806441",
+    "project_id": "venues-55e95",
+    "storage_bucket": "venues-55e95.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:373986806441:android:abb4cba31a4232040bf7b8",
+        "android_client_info": {
+          "package_name": "com.topshelfservicepros.venueshift"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBcsOoNRmjPRieIdjeQAhngmMYgMDDphQE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
